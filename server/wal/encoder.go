@@ -21,9 +21,10 @@ import (
 	"os"
 	"sync"
 
-	"go.etcd.io/etcd/pkg/v3/crc"
-	"go.etcd.io/etcd/pkg/v3/ioutil"
-	"go.etcd.io/etcd/server/v3/wal/walpb"
+	"go.etcd.io/etcd/pkg/crc"
+	"go.etcd.io/etcd/pkg/ioutil"
+	"go.etcd.io/etcd/pkg/pmemutil"
+	"go.etcd.io/etcd/wal/walpb"
 )
 
 // walPageBytes is the alignment for flushing records to the backing Writer.
@@ -57,6 +58,11 @@ func newFileEncoder(f *os.File, prevCrc uint32) (*encoder, error) {
 		return nil, err
 	}
 	return newEncoder(f, prevCrc, int(offset)), nil
+}
+
+// newPmemEncoder creates a new encoder with current file offset for the page writer.
+func newPmemEncoder(pw *pmemutil.Pmemwriter, prevCrc uint32) *encoder {
+	return newEncoder(pw, prevCrc, 0)
 }
 
 func (e *encoder) encode(rec *walpb.Record) error {

@@ -27,12 +27,11 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"go.etcd.io/etcd/client/pkg/v3/fileutil"
-	"go.etcd.io/etcd/pkg/v3/pbutil"
-	"go.etcd.io/etcd/raft/v3/raftpb"
-	"go.etcd.io/etcd/server/v3/wal/walpb"
-	"go.uber.org/zap/zaptest"
+	"go.etcd.io/etcd/pkg/fileutil"
+	"go.etcd.io/etcd/pkg/pmemutil"
+	"go.etcd.io/etcd/pkg/pbutil"
+	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/wal/walpb"
 
 	"go.uber.org/zap"
 )
@@ -93,8 +92,9 @@ func TestNew(t *testing.T) {
 		t.Fatalf("err = %v, want nil", err)
 	}
 	e.flush()
-	if !bytes.Equal(gd, wb.Bytes()) {
-		t.Errorf("data = %v, want %v", gd, wb.Bytes())
+	tf := pmemutil.Print(w.pmem)
+	if !bytes.Equal(tf, wb.Bytes()) {
+		t.Errorf("data = %v, want %v", tf, wb.Bytes())
 	}
 }
 
