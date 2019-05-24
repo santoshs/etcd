@@ -90,6 +90,7 @@ func (d *decoder) decodeRecord(rec *walpb.Record) error {
 		return ErrMaxWALEntrySizeLimitExceeded
 	}
 
+	fmt.Println("Total bytes", recBytes+padBytes)
 	data := make([]byte, recBytes+padBytes)
 	if _, err = io.ReadFull(d.brs[0], data); err != nil {
 		// ReadFull returns io.EOF only if no bytes were read
