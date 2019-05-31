@@ -17,7 +17,6 @@ package wal
 import (
 	"bufio"
 	"encoding/binary"
-	"fmt"
 	"hash"
 	"io"
 	"sync"
@@ -71,7 +70,6 @@ func (d *decoder) decodeRecord(rec *walpb.Record) error {
 	}
 
 	l, err := readInt64(d.brs[0])
-	fmt.Println("the length is : ", l)
 	if err == io.EOF || (err == nil && l == 0) {
 		// hit end of file or preallocated space
 		d.brs = d.brs[1:]
@@ -90,7 +88,6 @@ func (d *decoder) decodeRecord(rec *walpb.Record) error {
 		return ErrMaxWALEntrySizeLimitExceeded
 	}
 
-	fmt.Println("Total bytes", recBytes+padBytes)
 	data := make([]byte, recBytes+padBytes)
 	if _, err = io.ReadFull(d.brs[0], data); err != nil {
 		// ReadFull returns io.EOF only if no bytes were read
