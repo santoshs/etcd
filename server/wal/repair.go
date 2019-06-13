@@ -20,8 +20,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"go.etcd.io/etcd/client/pkg/v3/fileutil"
-	"go.etcd.io/etcd/server/v3/wal/walpb"
+	"go.etcd.io/etcd/pkg/pmemutil"
+	"go.etcd.io/etcd/pkg/fileutil"
+	"go.etcd.io/etcd/wal/walpb"
+
 	"go.uber.org/zap"
 )
 
@@ -40,7 +42,22 @@ func Repair(lg *zap.Logger, dirpath string) bool {
 	lg.Info("repairing", zap.String("path", f.Name()))
 
 	rec := &walpb.Record{}
-	decoder := newDecoder(f)
+
+	// Check if the last file opened is in pmem
+	pmemaware, err := pmemutil.IsPmemTrue(dirpath)
+	if err != nil {
+		return false
+	}
+
+	var decoder *decoder
+	pmemaware = true
+	if pmemaware {
+		pr := pmemutil.OpenForRead(f.Name())
+		decoder = newDecoder(pr)
+	} else {
+		decoder = newDecoder(f)
+	}
+
 	for {
 		lastOffset := decoder.lastOffset()
 		err := decoder.decode(rec)
@@ -64,32 +81,73 @@ func Repair(lg *zap.Logger, dirpath string) bool {
 			return true
 
 		case io.ErrUnexpectedEOF:
-			bf, bferr := os.Create(f.Name() + ".broken")
-			if bferr != nil {
-				lg.Warn("failed to create backup file", zap.String("path", f.Name()+".broken"), zap.Error(bferr))
-				return false
+			var bf io.Writer
+			if pmemaware {
+				// Do nothing here
+			} else {
+				bf, bferr := os.Create(f.Name() + ".broken")
+				if bferr != nil {
+					if lg != nil {
+						lg.Warn("failed to create backup file", zap.String("path", f.Name()+".broken"), zap.Error(bferr))
+					} else {
+						plog.Errorf("could not repair %v, failed to create backup file", f.Name())
+					}
+					return false
+				}
+				defer bf.Close()
 			}
-			defer bf.Close()
 
 			if _, err = f.Seek(0, io.SeekStart); err != nil {
 				lg.Warn("failed to read file", zap.String("path", f.Name()), zap.Error(err))
 				return false
 			}
 
-			if _, err = io.Copy(bf, f); err != nil {
-				lg.Warn("failed to copy", zap.String("from", f.Name()+".broken"), zap.String("to", f.Name()), zap.Error(err))
-				return false
-			}
+			if pmemaware {
+				// TODO Throw error when copy is failing on pmem instead of abrupt termination
+				pmemutil.Copy(f.Name(), f.Name()+".broken")
+				/*if _, err = pmemutil.Copy(f.Name(), f.Name()+".broken"); err != nil {
+					if lg != nil {
+						lg.Warn("failed to copy in pmem", zap.String("from", f.Name()+".broken"), zap.String("to", f.Name()), zap.Error(err))
+					} else {
+						plog.Errorf("could not repair %v, failed to copy file in pmem", f.Name())
+					}
+					return false
+				}*/
+				if err = pmemutil.Resize(f.Name(), lastOffset); err != nil {
+					if lg != nil {
+                                                lg.Warn("failed to truncate pmem file", zap.String("path", f.Name()), zap.Error(err))
+                                        } else {
+                                                plog.Errorf("could not repair %v, failed to truncate pmem file", f.Name())
+                                        }
+                                        return false
+		}
+			} else {
+				if _, err = io.Copy(bf, f); err != nil {
+					if lg != nil {
+						lg.Warn("failed to copy", zap.String("from", f.Name()+".broken"), zap.String("to", f.Name()), zap.Error(err))
+					} else {
+						plog.Errorf("could not repair %v, failed to copy file", f.Name())
+					}
+					return false
+				}
 
-			if err = f.Truncate(lastOffset); err != nil {
-				lg.Warn("failed to truncate", zap.String("path", f.Name()), zap.Error(err))
-				return false
-			}
+				if err = f.Truncate(lastOffset); err != nil {
+					if lg != nil {
+						lg.Warn("failed to truncate", zap.String("path", f.Name()), zap.Error(err))
+					} else {
+						plog.Errorf("could not repair %v, failed to truncate file", f.Name())
+					}
+					return false
+				}
 
-			start := time.Now()
-			if err = fileutil.Fsync(f.File); err != nil {
-				lg.Warn("failed to fsync", zap.String("path", f.Name()), zap.Error(err))
-				return false
+				if err = fileutil.Fsync(f.File); err != nil {
+					if lg != nil {
+						lg.Warn("failed to fsync", zap.String("path", f.Name()), zap.Error(err))
+					} else {
+						plog.Errorf("could not repair %v, failed to sync file", f.Name())
+					}
+					return false
+				}
 			}
 			walFsyncSec.Observe(time.Since(start).Seconds())
 
