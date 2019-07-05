@@ -20,8 +20,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"go.etcd.io/etcd/pkg/pmemutil"
 	"go.etcd.io/etcd/pkg/fileutil"
+	"go.etcd.io/etcd/pkg/pmemutil"
 	"go.etcd.io/etcd/wal/walpb"
 
 	"go.uber.org/zap"
@@ -115,12 +115,12 @@ func Repair(lg *zap.Logger, dirpath string) bool {
 				}*/
 				if err = pmemutil.Resize(f.Name(), lastOffset); err != nil {
 					if lg != nil {
-                                                lg.Warn("failed to truncate pmem file", zap.String("path", f.Name()), zap.Error(err))
-                                        } else {
-                                                plog.Errorf("could not repair %v, failed to truncate pmem file", f.Name())
-                                        }
-                                        return false
-		}
+						lg.Warn("failed to truncate pmem file", zap.String("path", f.Name()), zap.Error(err))
+					} else {
+						plog.Errorf("could not repair %v, failed to truncate pmem file", f.Name())
+					}
+					return false
+				}
 			} else {
 				if _, err = io.Copy(bf, f); err != nil {
 					if lg != nil {
