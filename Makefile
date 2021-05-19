@@ -27,6 +27,12 @@ build:
 	./bin/etcdctl version
 	./bin/etcdutl version
 
+.PHONY: build-pmem
+build-pmem:
+	GO_BUILD_FLAGS="-v -tags 'pmem'" ./build
+	./bin/etcd --version
+	./bin/etcdctl version
+
 clean:
 	rm -f ./codecov
 	rm -rf ./covdir
